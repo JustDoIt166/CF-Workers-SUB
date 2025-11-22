@@ -173,19 +173,34 @@ export default {
                 headers: { 'User-Agent': 'Mozilla/5.0 (Compatible; Cloudflare-Worker)' }
             });
 
-            if (!subRes.ok) {
-                 throw new Error(`Backend ${subRes.status}: ${await subRes.text()}`);
+            let backendText = '';
+            try {
+                backendText = await subRes.text();
+            } catch (err) {
+                console.error('读取后端响应失败:', err);
             }
 
-            let subText = await subRes.text();
-            return new Response(subText, { headers: responseHeaders });
+            if (!subRes.ok) {
+                console.error('后端转换失败:', backendUrl, backendText);
+                return new Response(`Backend ${subRes.status}: ${backendText || 'empty response'}`, {
+                    status: 502,
+                    headers: { 'content-type': 'text/plain; charset=utf-8' }
+                });
+            }
+
+            // 记录后端响应是否符合预期，便于排查
+            if (!backendText.trim()) {
+                console.warn('后端返回空内容:', backendUrl);
+            }
+
+            return new Response(backendText, { headers: responseHeaders });
 
         } catch (e) {
             console.error("转换失败:", e);
-            return new Response(
-                btoa(encodeURIComponent(finalSourceStr).replace(/%([0-9A-F]{2})/g, (m, p1) => String.fromCharCode(parseInt(p1, 16)))),
-                { headers: responseHeaders }
-            );
+            return new Response(`转换失败: ${e.message || e}`, {
+                status: 500,
+                headers: { 'content-type': 'text/plain; charset=utf-8' }
+            });
         }
     }
 };
