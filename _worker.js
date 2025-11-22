@@ -315,37 +315,63 @@ async function renderUI(request, env, FileName, token, isGuest, subConverter) {
 
                         <hr class="border-slate-100">
 
-                        <div>
-                            <label class="block text-sm font-medium text-slate-600 mb-2">分流规则 (Rules)</label>
-                            
-                            <div class="flex bg-slate-100 p-1 rounded-xl mb-3 w-fit">
-                                <button onclick="toggleRuleMode('preset')" id="tab-preset" class="px-4 py-1.5 rounded-lg text-sm font-medium bg-white shadow-sm text-indigo-600 transition-all">预设规则</button>
-                                <button onclick="toggleRuleMode('custom')" id="tab-custom" class="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 transition-all">自定义 JSON</button>
-                            </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 mb-2">分流规则 (Rules)</label>
 
-                            <div id="preset-area">
-                                <select id="selectedRules" class="form-select" onchange="updateLink()">
-                                    <option value="minimal">Minimal (精简模式)</option>
-                                    <option value="balanced">Balanced (均衡模式)</option>
-                                    <option value="comprehensive">Comprehensive (全面模式)</option>
-                                    <option value="adblock">AdBlock (去广告)</option>
+                        <div class="flex bg-slate-100 p-1 rounded-xl mb-3 w-fit">
+                            <button onclick="toggleRuleMode('preset')" id="tab-preset" class="px-4 py-1.5 rounded-lg text-sm font-medium bg-white shadow-sm text-indigo-600 transition-all">预设</button>
+                            <button onclick="toggleRuleMode('multi')" id="tab-multi" class="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 transition-all">多选</button>
+                            <button onclick="toggleRuleMode('custom')" id="tab-custom" class="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 transition-all">自定义 JSON</button>
+                        </div>
+
+                        <div id="preset-area" class="space-y-2">
+                            <p class="text-xs text-slate-500">快速选择官方预设：Minimal / Balanced / Comprehensive</p>
+                            <div class="relative">
+                                <select id="selectedRules" class="form-select appearance-none pr-10" onchange="updateLink()">
+                                    <option value="minimal">Minimal · 精简模式</option>
+                                    <option value="balanced">Balanced · 均衡模式</option>
+                                    <option value="comprehensive">Comprehensive · 全量模式</option>
                                 </select>
+                                <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-400">
+                                    <i class="fa-solid fa-chevron-down text-xs"></i>
+                                </span>
                             </div>
+                            <ul class="text-xs text-slate-500 list-disc pl-4 space-y-1">
+                                <li>Minimal: Location:CN, Private, Non-China</li>
+                                <li>Balanced: Minimal + Google, Youtube, Github, AI Services, Telegram</li>
+                                <li>Comprehensive: 包含全部可用规则</li>
+                            </ul>
+                        </div>
 
-                            <div id="custom-area" class="hidden">
-                                <textarea id="customRules" rows="4" class="form-textarea font-mono text-xs" placeholder='[{"site":"google.com","ip":"8.8.8.8","name":"MyRule"}]' oninput="updateLink()"></textarea>
-                                <div class="flex items-center justify-between mt-2">
-                                    <label class="flex items-center gap-2 cursor-pointer">
-                                        <input type="checkbox" id="pinCheck" class="rounded text-indigo-500 focus:ring-indigo-500" onchange="updateLink()">
-                                        <span class="text-xs text-slate-600">置顶规则 (Pin)</span>
+                        <div id="multi-area" class="hidden space-y-3">
+                            <p class="text-xs text-slate-500">勾选任意组合，自由拼装规则清单</p>
+                            <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                ${["Ad Block","AI Services","Bilibili","Youtube","Google","Private","Location:CN","Telegram","Github","Microsoft","Apple","Social Media","Streaming","Gaming","Education","Financial","Cloud Services","Non-China"].map(name => `
+                                    <label class=\"flex items-center gap-2 bg-slate-50 hover:bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-slate-700 cursor-pointer transition\">
+                                        <input type=\"checkbox\" value=\"${name}\" class=\"rule-check accent-indigo-500\" onchange=\"updateLink()\">
+                                        <span>${name}</span>
                                     </label>
-                                </div>
+                                `).join('')}
                             </div>
                         </div>
 
-                        <hr class="border-slate-100">
+                        <div id="custom-area" class="hidden space-y-2">
+                            <p class="text-xs text-slate-500">直接粘贴 customRules JSON 数组，自定义站点/协议规则</p>
+                            <textarea id="customRules" rows="4" class="form-textarea font-mono text-xs" placeholder='[{"name":"我的自定义规则","site":"google,anthropic"}]' oninput="updateLink()"></textarea>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="pinCheck" class="rounded text-indigo-500 focus:ring-indigo-500" onchange="updateLink()">
+                                <span class="text-xs text-slate-600">置顶规则 (Pin)</span>
+                            </label>
+                        </div>
+                    </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <hr class="border-slate-100">
+
+                    <details class="bg-slate-50 rounded-xl border border-slate-200 p-4" open>
+                        <summary class="cursor-pointer select-none text-sm font-semibold text-slate-700 flex items-center gap-2">
+                            <i class="fa-solid fa-gear text-indigo-500"></i> 高级选项
+                        </summary>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                             <div>
                                 <label class="block text-sm font-medium text-slate-600 mb-2">界面语言 (lang)</label>
                                 <select id="lang" class="form-select" onchange="updateLink()">
@@ -405,6 +431,7 @@ async function renderUI(request, env, FileName, token, isGuest, subConverter) {
                                 <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                             </label>
                         </div>
+                    </details>
                     </div>
                 </div>
 
@@ -524,25 +551,34 @@ async function renderUI(request, env, FileName, token, isGuest, subConverter) {
         function toggleRuleMode(mode) {
             currentMode = mode;
             const presetArea = document.getElementById('preset-area');
+            const multiArea = document.getElementById('multi-area');
             const customArea = document.getElementById('custom-area');
+
             const tabPreset = document.getElementById('tab-preset');
+            const tabMulti = document.getElementById('tab-multi');
             const tabCustom = document.getElementById('tab-custom');
+
+            const areas = [presetArea, multiArea, customArea];
+            const tabs = [tabPreset, tabMulti, tabCustom];
+
+            areas.forEach(area => area.classList.add('hidden'));
+            tabs.forEach(tab => tab.classList.remove('bg-white', 'shadow-sm', 'text-indigo-600'));
+            tabs.forEach(tab => tab.classList.add('text-slate-500'));
 
             if (mode === 'preset') {
                 presetArea.classList.remove('hidden');
-                customArea.classList.add('hidden');
                 tabPreset.classList.add('bg-white', 'shadow-sm', 'text-indigo-600');
                 tabPreset.classList.remove('text-slate-500');
-                tabCustom.classList.remove('bg-white', 'shadow-sm', 'text-indigo-600');
-                tabCustom.classList.add('text-slate-500');
+            } else if (mode === 'multi') {
+                multiArea.classList.remove('hidden');
+                tabMulti.classList.add('bg-white', 'shadow-sm', 'text-indigo-600');
+                tabMulti.classList.remove('text-slate-500');
             } else {
-                presetArea.classList.add('hidden');
                 customArea.classList.remove('hidden');
                 tabCustom.classList.add('bg-white', 'shadow-sm', 'text-indigo-600');
                 tabCustom.classList.remove('text-slate-500');
-                tabPreset.classList.remove('bg-white', 'shadow-sm', 'text-indigo-600');
-                tabPreset.classList.add('text-slate-500');
             }
+
             updateLink();
         }
 
@@ -561,6 +597,15 @@ async function renderUI(request, env, FileName, token, isGuest, subConverter) {
                 if (customJson) {
                     params.append('customRules', customJson);
                     if(isPin) params.append('pin', 'true');
+                } else {
+                    params.append('selectedRules', 'minimal');
+                }
+            } else if (currentMode === 'multi') {
+                const checked = Array.from(document.querySelectorAll('.rule-check:checked')).map(el => el.value);
+                if (checked.length > 0) {
+                    params.append('selectedRules', JSON.stringify(checked));
+                } else {
+                    params.append('selectedRules', 'minimal');
                 }
             } else {
                 const selectedRule = document.getElementById('selectedRules').value;
