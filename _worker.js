@@ -326,15 +326,32 @@ async function renderUI(request, env, FileName, token, isGuest, subConverter) {
 
                         <div id="preset-area" class="space-y-2">
                             <p class="text-xs text-slate-500">快速选择官方预设：Minimal / Balanced / Comprehensive</p>
-                            <div class="relative">
-                                <select id="selectedRules" class="form-select appearance-none pr-10" onchange="updateLink()">
-                                    <option value="minimal">Minimal · 精简模式</option>
-                                    <option value="balanced">Balanced · 均衡模式</option>
-                                    <option value="comprehensive">Comprehensive · 全量模式</option>
-                                </select>
-                                <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-400">
-                                    <i class="fa-solid fa-chevron-down text-xs"></i>
-                                </span>
+                            <div class="relative" id="presetDropdown">
+                                <button type="button" onclick="togglePresetDropdown()" id="presetTrigger" class="w-full flex items-center justify-between bg-white border border-slate-200 hover:border-indigo-200 hover:bg-indigo-50 text-left px-4 py-2.5 rounded-xl text-sm font-medium text-slate-700 transition shadow-sm">
+                                    <div>
+                                        <p class="text-sm" id="presetLabel">Minimal · 精简模式</p>
+                                        <p class="text-[11px] text-slate-500" id="presetHint">Location:CN · Private · Non-China</p>
+                                    </div>
+                                    <i class="fa-solid fa-chevron-down text-xs text-slate-400"></i>
+                                </button>
+                                <div id="presetMenu" class="hidden absolute z-10 mt-2 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+                                    <button type="button" class="w-full text-left px-4 py-3 hover:bg-indigo-50 transition flex justify-between items-start" onclick="setPreset('minimal','Minimal · 精简模式','Location:CN · Private · Non-China')">
+                                        <div>
+                                            <p class="text-sm font-semibold text-slate-800">Minimal</p>
+                                            <p class="text-xs text-slate-500">Location:CN, Private, Non-China</p>
+                                        </div>
+                                        <span class="text-[11px] text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full">推荐</span>
+                                    </button>
+                                    <button type="button" class="w-full text-left px-4 py-3 hover:bg-indigo-50 transition" onclick="setPreset('balanced','Balanced · 均衡模式','Minimal + Google + Youtube + Github + AI Services + Telegram')">
+                                        <p class="text-sm font-semibold text-slate-800">Balanced</p>
+                                        <p class="text-xs text-slate-500">Minimal + Google, Youtube, Github, AI Services, Telegram</p>
+                                    </button>
+                                    <button type="button" class="w-full text-left px-4 py-3 hover:bg-indigo-50 transition" onclick="setPreset('comprehensive','Comprehensive · 全量模式','包含全部可用规则')">
+                                        <p class="text-sm font-semibold text-slate-800">Comprehensive</p>
+                                        <p class="text-xs text-slate-500">包含全部可用规则</p>
+                                    </button>
+                                </div>
+                                <input type="hidden" id="selectedRules" value="minimal">
                             </div>
                             <ul class="text-xs text-slate-500 list-disc pl-4 space-y-1">
                                 <li>Minimal: Location:CN, Private, Non-China</li>
@@ -503,6 +520,8 @@ async function renderUI(request, env, FileName, token, isGuest, subConverter) {
         const configIdInput = document.getElementById('configId');
         const configParamInput = document.getElementById('configParam');
         const enableClashUiInput = document.getElementById('enableClashUi');
+        const presetMenu = document.getElementById('presetMenu');
+        const presetTrigger = document.getElementById('presetTrigger');
         const externalControllerInput = document.getElementById('externalController');
         const externalUiInput = document.getElementById('externalUi');
 
@@ -570,10 +589,12 @@ async function renderUI(request, env, FileName, token, isGuest, subConverter) {
                 tabPreset.classList.add('bg-white', 'shadow-sm', 'text-indigo-600');
                 tabPreset.classList.remove('text-slate-500');
             } else if (mode === 'multi') {
+                togglePresetDropdown(true);
                 multiArea.classList.remove('hidden');
                 tabMulti.classList.add('bg-white', 'shadow-sm', 'text-indigo-600');
                 tabMulti.classList.remove('text-slate-500');
             } else {
+                togglePresetDropdown(true);
                 customArea.classList.remove('hidden');
                 tabCustom.classList.add('bg-white', 'shadow-sm', 'text-indigo-600');
                 tabCustom.classList.remove('text-slate-500');
@@ -581,6 +602,38 @@ async function renderUI(request, env, FileName, token, isGuest, subConverter) {
 
             updateLink();
         }
+
+        function togglePresetDropdown(forceClose = false) {
+            const menu = document.getElementById('presetMenu');
+            const trigger = document.getElementById('presetTrigger');
+            if (forceClose) {
+                menu.classList.add('hidden');
+                trigger.classList.remove('ring-2', 'ring-indigo-500', 'border-indigo-200');
+                return;
+            }
+            const isHidden = menu.classList.contains('hidden');
+            document.querySelectorAll('#presetMenu').forEach(m => m.classList.add('hidden'));
+            if (isHidden) {
+                menu.classList.remove('hidden');
+                trigger.classList.add('ring-2', 'ring-indigo-500', 'border-indigo-200');
+            } else {
+                trigger.classList.remove('ring-2', 'ring-indigo-500', 'border-indigo-200');
+            }
+        }
+
+        function setPreset(value, label, hint) {
+            document.getElementById('selectedRules').value = value;
+            document.getElementById('presetLabel').innerText = label;
+            if (hint) document.getElementById('presetHint').innerText = hint;
+            togglePresetDropdown(true);
+            updateLink();
+        }
+
+        document.addEventListener('click', (e) => {
+            if (!document.getElementById('presetDropdown').contains(e.target)) {
+                togglePresetDropdown(true);
+            }
+        });
 
         function updateLink() {
             const target = document.getElementById('targetInput').value;
