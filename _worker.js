@@ -34,6 +34,13 @@ export default {
         let UD = Math.floor(((timestamp - Date.now()) / timestamp * total * 1099511627776) / 2);
         total = total * 1099511627776;
         
+        const targetContentType = {
+            "singbox": "application/json; charset=utf-8",
+            "clash": "text/yaml; charset=utf-8",
+            "surge": "text/plain; charset=utf-8",
+            "xray": "text/plain; charset=utf-8"
+        };
+
         const responseHeaders = {
             "content-type": "text/plain; charset=utf-8",
             "Profile-Update-Interval": "6",
@@ -103,45 +110,62 @@ export default {
         // -------------------------------------------------------------
         // 4. 调用 API 转换
         // -------------------------------------------------------------
-        const target = url.searchParams.get('target') || 'singbox'; 
-        const reqSelectedRules = url.searchParams.get('selectedRules');
+        const target = (url.searchParams.get('target') || 'singbox').toLowerCase();
+        const targetPath = ["singbox", "clash", "surge", "xray"].includes(target) ? target : "singbox";
+        responseHeaders["content-type"] = targetContentType[targetPath] || responseHeaders["content-type"];
+
+        const reqSelectedRules = url.searchParams.get('selectedRules') || "minimal";
         const reqCustomRules = url.searchParams.get('customRules');
-        const reqGroup = url.searchParams.get('group_by_country') || 'true';
+        const reqGroup = url.searchParams.has('group_by_country') ? url.searchParams.get('group_by_country') : 'false';
         const reqPin = url.searchParams.get('pin') || 'false';
+        const reqLang = url.searchParams.get('lang');
+        const reqUa = url.searchParams.get('ua') || userAgentHeader || 'curl/7.74.0';
+        const reqConfigId = url.searchParams.get('configId');
+        const reqEnableClashUi = url.searchParams.get('enable_clash_ui');
+        const reqExternalController = url.searchParams.get('external_controller');
+        const reqExternalUi = url.searchParams.get('external_ui_download_url');
+        const rawConfig = url.searchParams.get('config');
 
         const sourceConfigUrl = `${url.origin}/${token}?b64=1`;
-        let backendUrl = `https://${subConverter}/${target}?config=${encodeURIComponent(sourceConfigUrl)}`;
-        
-        if (reqCustomRules && reqCustomRules !== '[]' && reqCustomRules.length > 5) {
-            backendUrl += `&customRules=${encodeURIComponent(reqCustomRules)}`;
-            if (reqPin === 'true') backendUrl += `&pin=true`;
+        const backendParams = new URLSearchParams();
+        backendParams.set('config', rawConfig || sourceConfigUrl);
+        backendParams.set('ua', reqUa);
+        backendParams.set('group_by_country', reqGroup);
+
+        if (reqLang) backendParams.set('lang', reqLang);
+
+        if (reqCustomRules && reqCustomRules !== '[]' && reqCustomRules.length > 2) {
+            backendParams.set('customRules', reqCustomRules);
+            if (reqPin === 'true') backendParams.set('pin', 'true');
         } else {
-            const ruleName = reqSelectedRules || "minimal"; 
-            const formattedRule = ruleName.startsWith('"') ? ruleName : `"${ruleName}"`;
-            backendUrl += `&selectedRules=${encodeURIComponent(formattedRule)}`;
-            backendUrl += `&customRules=%5B%5D`;
+            backendParams.set('selectedRules', reqSelectedRules);
+            backendParams.set('customRules', '[]');
         }
 
-        backendUrl += `&group_by_country=${reqGroup}`;
-        backendUrl += `&ua=${encodeURIComponent(userAgentHeader)}`; 
+        if (reqConfigId) backendParams.set('configId', reqConfigId);
+        if (reqEnableClashUi === 'true') backendParams.set('enable_clash_ui', 'true');
+        if (reqExternalController) backendParams.set('external_controller', reqExternalController);
+        if (reqExternalUi) backendParams.set('external_ui_download_url', reqExternalUi);
+
+        const backendUrl = `https://${subConverter}/${targetPath}?${backendParams.toString()}`;
 
         try {
             const subRes = await fetch(backendUrl, {
                 headers: { 'User-Agent': 'Mozilla/5.0 (Compatible; Cloudflare-Worker)' }
             });
-            
+
             if (!subRes.ok) {
                  throw new Error(`Backend ${subRes.status}: ${await subRes.text()}`);
             }
-            
+
             let subText = await subRes.text();
             responseHeaders["Content-Disposition"] = `attachment; filename*=utf-8''${encodeURIComponent(FileName)}`;
             return new Response(subText, { headers: responseHeaders });
-            
+
         } catch (e) {
             console.error("转换失败:", e);
             return new Response(
-                btoa(encodeURIComponent(finalSourceStr).replace(/%([0-9A-F]{2})/g, (m, p1) => String.fromCharCode(parseInt(p1, 16)))), 
+                btoa(encodeURIComponent(finalSourceStr).replace(/%([0-9A-F]{2})/g, (m, p1) => String.fromCharCode(parseInt(p1, 16)))),
                 { headers: responseHeaders }
             );
         }
@@ -280,40 +304,137 @@ async function renderUI(request, env, FileName, token, isGuest, subConverter) {
                     <div class="space-y-5">
                         <div>
                             <label class="block text-sm font-medium text-slate-600 mb-2">目标客户端 (Target)</label>
-                            <div class="grid grid-cols-3 gap-2">
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
                                 <button onclick="setTarget('singbox')" id="btn-singbox" class="target-btn active ring-2 ring-indigo-500 bg-indigo-50 text-indigo-700 py-2 rounded-xl border border-indigo-200 font-medium text-sm">Sing-Box</button>
                                 <button onclick="setTarget('clash')" id="btn-clash" class="target-btn bg-white hover:bg-slate-50 text-slate-600 py-2 rounded-xl border border-slate-200 font-medium text-sm">Clash</button>
                                 <button onclick="setTarget('surge')" id="btn-surge" class="target-btn bg-white hover:bg-slate-50 text-slate-600 py-2 rounded-xl border border-slate-200 font-medium text-sm">Surge</button>
+                                <button onclick="setTarget('xray')" id="btn-xray" class="target-btn bg-white hover:bg-slate-50 text-slate-600 py-2 rounded-xl border border-slate-200 font-medium text-sm">Xray</button>
                             </div>
                             <input type="hidden" id="targetInput" value="singbox">
                         </div>
 
                         <hr class="border-slate-100">
 
-                        <div>
-                            <label class="block text-sm font-medium text-slate-600 mb-2">分流规则 (Rules)</label>
-                            
-                            <div class="flex bg-slate-100 p-1 rounded-xl mb-3 w-fit">
-                                <button onclick="toggleRuleMode('preset')" id="tab-preset" class="px-4 py-1.5 rounded-lg text-sm font-medium bg-white shadow-sm text-indigo-600 transition-all">预设规则</button>
-                                <button onclick="toggleRuleMode('custom')" id="tab-custom" class="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 transition-all">自定义 JSON</button>
-                            </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 mb-2">分流规则 (Rules)</label>
 
-                            <div id="preset-area">
-                                <select id="selectedRules" class="form-select" onchange="updateLink()">
-                                    <option value="minimal">Minimal (精简模式)</option>
-                                    <option value="balanced">Balanced (均衡模式)</option>
-                                    <option value="comprehensive">Comprehensive (全面模式)</option>
-                                    <option value="adblock">AdBlock (去广告)</option>
+                        <div class="flex bg-slate-100 p-1 rounded-xl mb-3 w-fit">
+                            <button onclick="toggleRuleMode('preset')" id="tab-preset" class="px-4 py-1.5 rounded-lg text-sm font-medium bg-white shadow-sm text-indigo-600 transition-all">预设</button>
+                            <button onclick="toggleRuleMode('multi')" id="tab-multi" class="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 transition-all">多选</button>
+                            <button onclick="toggleRuleMode('custom')" id="tab-custom" class="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 transition-all">自定义 JSON</button>
+                        </div>
+
+                        <div id="preset-area" class="space-y-2">
+                            <p class="text-xs text-slate-500">快速选择官方预设：Minimal / Balanced / Comprehensive</p>
+                            <div class="relative" id="presetDropdown">
+                                <button type="button" onclick="togglePresetDropdown()" id="presetTrigger" class="w-full flex items-center justify-between bg-white border border-slate-200 hover:border-indigo-200 hover:bg-indigo-50 text-left px-4 py-2.5 rounded-xl text-sm font-medium text-slate-700 transition shadow-sm">
+                                    <div>
+                                        <p class="text-sm" id="presetLabel">Minimal · 精简模式</p>
+                                        <p class="text-[11px] text-slate-500" id="presetHint">Location:CN · Private · Non-China</p>
+                                    </div>
+                                    <i class="fa-solid fa-chevron-down text-xs text-slate-400"></i>
+                                </button>
+                                <div id="presetMenu" class="hidden absolute z-10 mt-2 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+                                    <button type="button" class="w-full text-left px-4 py-3 hover:bg-indigo-50 transition flex justify-between items-start" onclick="setPreset('minimal','Minimal · 精简模式','Location:CN · Private · Non-China')">
+                                        <div>
+                                            <p class="text-sm font-semibold text-slate-800">Minimal</p>
+                                            <p class="text-xs text-slate-500">Location:CN, Private, Non-China</p>
+                                        </div>
+                                        <span class="text-[11px] text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full">推荐</span>
+                                    </button>
+                                    <button type="button" class="w-full text-left px-4 py-3 hover:bg-indigo-50 transition" onclick="setPreset('balanced','Balanced · 均衡模式','Minimal + Google + Youtube + Github + AI Services + Telegram')">
+                                        <p class="text-sm font-semibold text-slate-800">Balanced</p>
+                                        <p class="text-xs text-slate-500">Minimal + Google, Youtube, Github, AI Services, Telegram</p>
+                                    </button>
+                                    <button type="button" class="w-full text-left px-4 py-3 hover:bg-indigo-50 transition" onclick="setPreset('comprehensive','Comprehensive · 全量模式','包含全部可用规则')">
+                                        <p class="text-sm font-semibold text-slate-800">Comprehensive</p>
+                                        <p class="text-xs text-slate-500">包含全部可用规则</p>
+                                    </button>
+                                </div>
+                                <input type="hidden" id="selectedRules" value="minimal">
+                            </div>
+                            <ul class="text-xs text-slate-500 list-disc pl-4 space-y-1">
+                                <li>Minimal: Location:CN, Private, Non-China</li>
+                                <li>Balanced: Minimal + Google, Youtube, Github, AI Services, Telegram</li>
+                                <li>Comprehensive: 包含全部可用规则</li>
+                            </ul>
+                        </div>
+
+                        <div id="multi-area" class="hidden space-y-3">
+                            <p class="text-xs text-slate-500">勾选任意组合，自由拼装规则清单</p>
+                            <div class="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                ${["Ad Block","AI Services","Bilibili","Youtube","Google","Private","Location:CN","Telegram","Github","Microsoft","Apple","Social Media","Streaming","Gaming","Education","Financial","Cloud Services","Non-China"].map(name => `
+                                    <label class=\"flex items-center gap-2 bg-slate-50 hover:bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-medium text-slate-700 cursor-pointer transition\">
+                                        <input type=\"checkbox\" value=\"${name}\" class=\"rule-check accent-indigo-500\" onchange=\"updateLink()\">
+                                        <span>${name}</span>
+                                    </label>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <div id="custom-area" class="hidden space-y-2">
+                            <p class="text-xs text-slate-500">直接粘贴 customRules JSON 数组，自定义站点/协议规则</p>
+                            <textarea id="customRules" rows="4" class="form-textarea font-mono text-xs" placeholder='[{"name":"我的自定义规则","site":"google,anthropic"}]' oninput="updateLink()"></textarea>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="pinCheck" class="rounded text-indigo-500 focus:ring-indigo-500" onchange="updateLink()">
+                                <span class="text-xs text-slate-600">置顶规则 (Pin)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <hr class="border-slate-100">
+
+                    <details class="bg-slate-50 rounded-xl border border-slate-200 p-4" open>
+                        <summary class="cursor-pointer select-none text-sm font-semibold text-slate-700 flex items-center gap-2">
+                            <i class="fa-solid fa-gear text-indigo-500"></i> 高级选项
+                        </summary>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-600 mb-2">界面语言 (lang)</label>
+                                <select id="lang" class="form-select" onchange="updateLink()">
+                                    <option value="">默认 (zh-CN)</option>
+                                    <option value="zh-CN">中文 (zh-CN)</option>
+                                    <option value="en-US">English (en-US)</option>
+                                    <option value="fa">فارسی (fa)</option>
+                                    <option value="ru">Русский (ru)</option>
                                 </select>
                             </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-600 mb-2">订阅拉取 UA (ua)</label>
+                                <input id="ua" type="text" class="form-input" placeholder="curl/7.74.0" value="" oninput="updateLink()">
+                            </div>
+                        </div>
 
-                            <div id="custom-area" class="hidden">
-                                <textarea id="customRules" rows="4" class="form-textarea font-mono text-xs" placeholder='[{"site":"google.com","ip":"8.8.8.8","name":"MyRule"}]' oninput="updateLink()"></textarea>
-                                <div class="flex items-center justify-between mt-2">
-                                    <label class="flex items-center gap-2 cursor-pointer">
-                                        <input type="checkbox" id="pinCheck" class="rounded text-indigo-500 focus:ring-indigo-500" onchange="updateLink()">
-                                        <span class="text-xs text-slate-600">置顶规则 (Pin)</span>
-                                    </label>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-600 mb-2">模板 ID (configId)</label>
+                                <input id="configId" type="text" class="form-input" placeholder="singbox_xxxx" oninput="updateLink()">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-600 mb-2">自定义 config 参数 (可选)</label>
+                                <input id="configParam" type="text" class="form-input" placeholder="覆盖默认聚合订阅" oninput="updateLink()">
+                            </div>
+                        </div>
+
+                        <div class="mt-4 p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm font-semibold text-slate-700">Clash 面板支持</p>
+                                    <p class="text-xs text-slate-500">开启后可直接使用外部控制器与自定义 Dashboard 下载</p>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" id="enableClashUi" class="sr-only peer" onchange="updateLink()">
+                                    <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                                </label>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">external_controller</label>
+                                    <input id="externalController" type="text" class="form-input" placeholder="0.0.0.0:9090" oninput="updateLink()">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">external_ui_download_url</label>
+                                    <input id="externalUi" type="text" class="form-input" placeholder="https://.../dashboard.zip" oninput="updateLink()">
                                 </div>
                             </div>
                         </div>
@@ -323,10 +444,11 @@ async function renderUI(request, env, FileName, token, isGuest, subConverter) {
                         <div class="flex items-center justify-between">
                             <span class="text-sm font-medium text-slate-600">按国家/地区分组</span>
                             <label class="relative inline-flex items-center cursor-pointer">
-                                <input type="checkbox" id="groupCheck" class="sr-only peer" checked onchange="updateLink()">
+                                <input type="checkbox" id="groupCheck" class="sr-only peer" onchange="updateLink()">
                                 <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
                             </label>
                         </div>
+                    </details>
                     </div>
                 </div>
 
@@ -391,8 +513,21 @@ async function renderUI(request, env, FileName, token, isGuest, subConverter) {
 
     <script>
         const baseUrl = "${origin}/${token}";
-        let currentMode = 'preset'; 
+        let currentMode = 'preset';
         let isQRVisible = false;
+        const uaInput = document.getElementById('ua');
+        const langSelect = document.getElementById('lang');
+        const configIdInput = document.getElementById('configId');
+        const configParamInput = document.getElementById('configParam');
+        const enableClashUiInput = document.getElementById('enableClashUi');
+        const presetMenu = document.getElementById('presetMenu');
+        const presetTrigger = document.getElementById('presetTrigger');
+        const externalControllerInput = document.getElementById('externalController');
+        const externalUiInput = document.getElementById('externalUi');
+
+        if (!uaInput.value && navigator.userAgent) {
+            uaInput.placeholder = navigator.userAgent;
+        }
 
         // 二维码开关逻辑
         function toggleQRCode() {
@@ -435,34 +570,77 @@ async function renderUI(request, env, FileName, token, isGuest, subConverter) {
         function toggleRuleMode(mode) {
             currentMode = mode;
             const presetArea = document.getElementById('preset-area');
+            const multiArea = document.getElementById('multi-area');
             const customArea = document.getElementById('custom-area');
+
             const tabPreset = document.getElementById('tab-preset');
+            const tabMulti = document.getElementById('tab-multi');
             const tabCustom = document.getElementById('tab-custom');
+
+            const areas = [presetArea, multiArea, customArea];
+            const tabs = [tabPreset, tabMulti, tabCustom];
+
+            areas.forEach(area => area.classList.add('hidden'));
+            tabs.forEach(tab => tab.classList.remove('bg-white', 'shadow-sm', 'text-indigo-600'));
+            tabs.forEach(tab => tab.classList.add('text-slate-500'));
 
             if (mode === 'preset') {
                 presetArea.classList.remove('hidden');
-                customArea.classList.add('hidden');
                 tabPreset.classList.add('bg-white', 'shadow-sm', 'text-indigo-600');
                 tabPreset.classList.remove('text-slate-500');
-                tabCustom.classList.remove('bg-white', 'shadow-sm', 'text-indigo-600');
-                tabCustom.classList.add('text-slate-500');
+            } else if (mode === 'multi') {
+                togglePresetDropdown(true);
+                multiArea.classList.remove('hidden');
+                tabMulti.classList.add('bg-white', 'shadow-sm', 'text-indigo-600');
+                tabMulti.classList.remove('text-slate-500');
             } else {
-                presetArea.classList.add('hidden');
+                togglePresetDropdown(true);
                 customArea.classList.remove('hidden');
                 tabCustom.classList.add('bg-white', 'shadow-sm', 'text-indigo-600');
                 tabCustom.classList.remove('text-slate-500');
-                tabPreset.classList.remove('bg-white', 'shadow-sm', 'text-indigo-600');
-                tabPreset.classList.add('text-slate-500');
             }
+
             updateLink();
         }
+
+        function togglePresetDropdown(forceClose = false) {
+            const menu = document.getElementById('presetMenu');
+            const trigger = document.getElementById('presetTrigger');
+            if (forceClose) {
+                menu.classList.add('hidden');
+                trigger.classList.remove('ring-2', 'ring-indigo-500', 'border-indigo-200');
+                return;
+            }
+            const isHidden = menu.classList.contains('hidden');
+            document.querySelectorAll('#presetMenu').forEach(m => m.classList.add('hidden'));
+            if (isHidden) {
+                menu.classList.remove('hidden');
+                trigger.classList.add('ring-2', 'ring-indigo-500', 'border-indigo-200');
+            } else {
+                trigger.classList.remove('ring-2', 'ring-indigo-500', 'border-indigo-200');
+            }
+        }
+
+        function setPreset(value, label, hint) {
+            document.getElementById('selectedRules').value = value;
+            document.getElementById('presetLabel').innerText = label;
+            if (hint) document.getElementById('presetHint').innerText = hint;
+            togglePresetDropdown(true);
+            updateLink();
+        }
+
+        document.addEventListener('click', (e) => {
+            if (!document.getElementById('presetDropdown').contains(e.target)) {
+                togglePresetDropdown(true);
+            }
+        });
 
         function updateLink() {
             const target = document.getElementById('targetInput').value;
             const isGroup = document.getElementById('groupCheck').checked;
             
             let params = new URLSearchParams();
-            params.append('target', target); 
+            params.append('target', target);
             if (isGroup) params.append('group_by_country', 'true');
             else params.append('group_by_country', 'false');
 
@@ -470,13 +648,38 @@ async function renderUI(request, env, FileName, token, isGuest, subConverter) {
                 const customJson = document.getElementById('customRules').value.trim();
                 const isPin = document.getElementById('pinCheck').checked;
                 if (customJson) {
-                    params.append('customRules', customJson); 
+                    params.append('customRules', customJson);
                     if(isPin) params.append('pin', 'true');
+                } else {
+                    params.append('selectedRules', 'minimal');
+                }
+            } else if (currentMode === 'multi') {
+                const checked = Array.from(document.querySelectorAll('.rule-check:checked')).map(el => el.value);
+                if (checked.length > 0) {
+                    params.append('selectedRules', JSON.stringify(checked));
+                } else {
+                    params.append('selectedRules', 'minimal');
                 }
             } else {
                 const selectedRule = document.getElementById('selectedRules').value;
                 params.append('selectedRules', selectedRule);
             }
+
+            const lang = langSelect.value;
+            const ua = uaInput.value.trim();
+            const configId = configIdInput.value.trim();
+            const configParam = configParamInput.value.trim();
+            const enableClashUi = enableClashUiInput.checked;
+            const externalController = externalControllerInput.value.trim();
+            const externalUi = externalUiInput.value.trim();
+
+            if (lang) params.append('lang', lang);
+            if (ua) params.append('ua', ua);
+            if (configId) params.append('configId', configId);
+            if (configParam) params.append('config', configParam);
+            if (enableClashUi) params.append('enable_clash_ui', 'true');
+            if (externalController) params.append('external_controller', externalController);
+            if (externalUi) params.append('external_ui_download_url', externalUi);
 
             const finalUrl = baseUrl + "?" + params.toString();
             document.getElementById('finalLink').value = finalUrl;
@@ -516,6 +719,9 @@ async function renderUI(request, env, FileName, token, isGuest, subConverter) {
             } else if (target === 'surge') {
                 btn.href = 'surge:///install-config?url=' + encodeURIComponent(url);
                 span.innerText = '导入到 Surge';
+            } else if (target === 'xray') {
+                btn.href = url;
+                span.innerText = '导入到 Xray';
             } else {
                 btn.href = url;
                 span.innerText = '打开订阅链接';
