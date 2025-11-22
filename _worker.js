@@ -125,10 +125,20 @@ export default {
         const reqExternalController = url.searchParams.get('external_controller');
         const reqExternalUi = url.searchParams.get('external_ui_download_url');
         const rawConfig = url.searchParams.get('config');
+        const normalizedConfig = normalizeConfig(rawConfig);
 
         const sourceConfigUrl = `${url.origin}/${token}?b64=1`;
         const backendParams = new URLSearchParams();
-        backendParams.set('config', rawConfig || sourceConfigUrl);
+        if (normalizedConfig) {
+            backendParams.set('config', normalizedConfig);
+        } else if (finalSourceStr) {
+            backendParams.set('config', sourceConfigUrl);
+        } else {
+            return new Response('缺少订阅配置，请提供 config 参数或在 KV/LINKSUB 中配置源订阅。', {
+                status: 400,
+                headers: { 'content-type': 'text/plain; charset=utf-8' }
+            });
+        }
         backendParams.set('ua', reqUa);
         backendParams.set('group_by_country', reqGroup);
 
@@ -275,6 +285,19 @@ async function MD5MD5(text) {
     const encoder = new TextEncoder();
     const firstPass = await crypto.subtle.digest('MD5', encoder.encode(text));
     return Array.from(new Uint8Array(firstPass)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function normalizeConfig(rawConfig) {
+    if (!rawConfig) return '';
+    const trimmed = rawConfig.trim();
+    if (!trimmed) return '';
+
+    const spaceFixed = trimmed.replace(/ /g, '+');
+    const compact = spaceFixed.replace(/\s+/g, '');
+    if (isValidBase64(compact)) {
+        return compact;
+    }
+    return trimmed;
 }
 
 function sanitizeFileToken(token) {
