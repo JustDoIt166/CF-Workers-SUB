@@ -147,6 +147,25 @@ export default {
         if (reqExternalController) backendParams.set('external_controller', reqExternalController);
         if (reqExternalUi) backendParams.set('external_ui_download_url', reqExternalUi);
 
+        const ruleLabel = (() => {
+            if (reqCustomRules && reqCustomRules !== '[]' && reqCustomRules.length > 2) return 'custom';
+            if (reqSelectedRules && reqSelectedRules.trim().startsWith('[')) return 'multi';
+            return reqSelectedRules || 'minimal';
+        })();
+
+        const targetExtensions = {
+            "singbox": ".json",
+            "clash": ".yaml",
+            "surge": ".conf",
+            "xray": ".txt"
+        };
+
+        const nameParts = [sanitizeFileToken(FileName), sanitizeFileToken(targetPath)];
+        const configLabel = sanitizeFileToken(reqConfigId || ruleLabel);
+        if (configLabel) nameParts.push(configLabel);
+        const subscriptionFileName = `${nameParts.join('-')}${targetExtensions[targetPath] || '.txt'}`;
+        responseHeaders["Content-Disposition"] = `attachment; filename*=utf-8''${encodeURIComponent(subscriptionFileName)}`;
+
         const backendUrl = `https://${subConverter}/${targetPath}?${backendParams.toString()}`;
 
         try {
@@ -159,7 +178,6 @@ export default {
             }
 
             let subText = await subRes.text();
-            responseHeaders["Content-Disposition"] = `attachment; filename*=utf-8''${encodeURIComponent(FileName)}`;
             return new Response(subText, { headers: responseHeaders });
 
         } catch (e) {
@@ -242,6 +260,11 @@ async function MD5MD5(text) {
     const encoder = new TextEncoder();
     const firstPass = await crypto.subtle.digest('MD5', encoder.encode(text));
     return Array.from(new Uint8Array(firstPass)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function sanitizeFileToken(token) {
+    if (!token) return '';
+    return token.toString().trim().replace(/[^a-zA-Z0-9._-]+/g, '-');
 }
 
 async function nginx() {
