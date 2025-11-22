@@ -125,10 +125,20 @@ export default {
         const reqExternalController = url.searchParams.get('external_controller');
         const reqExternalUi = url.searchParams.get('external_ui_download_url');
         const rawConfig = url.searchParams.get('config');
+        const normalizedConfig = normalizeConfig(rawConfig);
 
         const sourceConfigUrl = `${url.origin}/${token}?b64=1`;
         const backendParams = new URLSearchParams();
-        backendParams.set('config', rawConfig || sourceConfigUrl);
+        if (normalizedConfig) {
+            backendParams.set('config', normalizedConfig);
+        } else if (finalSourceStr) {
+            backendParams.set('config', sourceConfigUrl);
+        } else {
+            return new Response('缺少订阅配置，请提供 config 参数或在 KV/LINKSUB 中配置源订阅。', {
+                status: 400,
+                headers: { 'content-type': 'text/plain; charset=utf-8' }
+            });
+        }
         backendParams.set('ua', reqUa);
         backendParams.set('group_by_country', reqGroup);
 
@@ -173,19 +183,34 @@ export default {
                 headers: { 'User-Agent': 'Mozilla/5.0 (Compatible; Cloudflare-Worker)' }
             });
 
-            if (!subRes.ok) {
-                 throw new Error(`Backend ${subRes.status}: ${await subRes.text()}`);
+            let backendText = '';
+            try {
+                backendText = await subRes.text();
+            } catch (err) {
+                console.error('读取后端响应失败:', err);
             }
 
-            let subText = await subRes.text();
-            return new Response(subText, { headers: responseHeaders });
+            if (!subRes.ok) {
+                console.error('后端转换失败:', backendUrl, backendText);
+                return new Response(`Backend ${subRes.status}: ${backendText || 'empty response'}`, {
+                    status: 502,
+                    headers: { 'content-type': 'text/plain; charset=utf-8' }
+                });
+            }
+
+            // 记录后端响应是否符合预期，便于排查
+            if (!backendText.trim()) {
+                console.warn('后端返回空内容:', backendUrl);
+            }
+
+            return new Response(backendText, { headers: responseHeaders });
 
         } catch (e) {
             console.error("转换失败:", e);
-            return new Response(
-                btoa(encodeURIComponent(finalSourceStr).replace(/%([0-9A-F]{2})/g, (m, p1) => String.fromCharCode(parseInt(p1, 16)))),
-                { headers: responseHeaders }
-            );
+            return new Response(`转换失败: ${e.message || e}`, {
+                status: 500,
+                headers: { 'content-type': 'text/plain; charset=utf-8' }
+            });
         }
     }
 };
@@ -260,6 +285,19 @@ async function MD5MD5(text) {
     const encoder = new TextEncoder();
     const firstPass = await crypto.subtle.digest('MD5', encoder.encode(text));
     return Array.from(new Uint8Array(firstPass)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function normalizeConfig(rawConfig) {
+    if (!rawConfig) return '';
+    const trimmed = rawConfig.trim();
+    if (!trimmed) return '';
+
+    const spaceFixed = trimmed.replace(/ /g, '+');
+    const compact = spaceFixed.replace(/\s+/g, '');
+    if (isValidBase64(compact)) {
+        return compact;
+    }
+    return trimmed;
 }
 
 function sanitizeFileToken(token) {
