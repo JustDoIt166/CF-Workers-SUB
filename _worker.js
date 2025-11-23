@@ -114,7 +114,7 @@ export default {
         const targetPath = ["singbox", "clash", "surge", "xray"].includes(target) ? target : "singbox";
         responseHeaders["content-type"] = targetContentType[targetPath] || responseHeaders["content-type"];
 
-        const reqSelectedRules = url.searchParams.get('selectedRules') || "minimal";
+        const reqSelectedRules = url.searchParams.get('selectedRules') || "";
         const reqCustomRules = url.searchParams.get('customRules');
         const reqGroup = url.searchParams.has('group_by_country') ? url.searchParams.get('group_by_country') : 'false';
         const reqPin = url.searchParams.get('pin') || 'false';
@@ -144,11 +144,19 @@ export default {
 
         if (reqLang) backendParams.set('lang', reqLang);
 
-        if (reqCustomRules && reqCustomRules !== '[]' && reqCustomRules.length > 2) {
+        const hasCustomRules = reqCustomRules && reqCustomRules !== '[]' && reqCustomRules.trim().length > 2;
+        const hasSelectedRules = reqSelectedRules && reqSelectedRules.trim() !== '';
+
+        if (hasSelectedRules) {
+            backendParams.set('selectedRules', reqSelectedRules);
+        } else if (!hasCustomRules) {
+            backendParams.set('selectedRules', 'minimal');
+        }
+
+        if (hasCustomRules) {
             backendParams.set('customRules', reqCustomRules);
             if (reqPin === 'true') backendParams.set('pin', 'true');
         } else {
-            backendParams.set('selectedRules', reqSelectedRules);
             backendParams.set('customRules', '[]');
         }
 
@@ -382,7 +390,6 @@ async function renderUI(request, env, FileName, token, isGuest, subConverter) {
                         <div class="flex bg-slate-100 p-1 rounded-xl mb-3 w-fit">
                             <button onclick="toggleRuleMode('preset')" id="tab-preset" class="px-4 py-1.5 rounded-lg text-sm font-medium bg-white shadow-sm text-indigo-600 transition-all">预设</button>
                             <button onclick="toggleRuleMode('multi')" id="tab-multi" class="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 transition-all">多选</button>
-                            <button onclick="toggleRuleMode('custom')" id="tab-custom" class="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 transition-all">自定义 JSON</button>
                         </div>
 
                         <div id="preset-area" class="space-y-2">
@@ -433,8 +440,17 @@ async function renderUI(request, env, FileName, token, isGuest, subConverter) {
                             </div>
                         </div>
 
-                        <div id="custom-area" class="hidden space-y-2">
-                            <p class="text-xs text-slate-500">直接粘贴 customRules JSON 数组，自定义站点/协议规则</p>
+                        <div class="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm font-medium text-slate-700">自定义规则 JSON (可选)</p>
+                                    <p class="text-[11px] text-slate-500">可与预设或多选规则同时生效，或单独使用</p>
+                                </div>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" id="enableCustomRules" class="rounded text-indigo-500 focus:ring-indigo-500" onchange="toggleCustomRules()">
+                                    <span class="text-xs text-slate-600">启用</span>
+                                </label>
+                            </div>
                             <textarea id="customRules" rows="4" class="form-textarea font-mono text-xs" placeholder='[{"name":"我的自定义规则","site":"google,anthropic"}]' oninput="updateLink()"></textarea>
                             <label class="flex items-center gap-2 cursor-pointer">
                                 <input type="checkbox" id="pinCheck" class="rounded text-indigo-500 focus:ring-indigo-500" onchange="updateLink()">
@@ -585,6 +601,9 @@ async function renderUI(request, env, FileName, token, isGuest, subConverter) {
         const presetTrigger = document.getElementById('presetTrigger');
         const externalControllerInput = document.getElementById('externalController');
         const externalUiInput = document.getElementById('externalUi');
+        const customRulesInput = document.getElementById('customRules');
+        const pinCheckInput = document.getElementById('pinCheck');
+        const enableCustomRulesInput = document.getElementById('enableCustomRules');
 
         if (!uaInput.value && navigator.userAgent) {
             uaInput.placeholder = navigator.userAgent;
@@ -632,33 +651,25 @@ async function renderUI(request, env, FileName, token, isGuest, subConverter) {
             currentMode = mode;
             const presetArea = document.getElementById('preset-area');
             const multiArea = document.getElementById('multi-area');
-            const customArea = document.getElementById('custom-area');
 
             const tabPreset = document.getElementById('tab-preset');
             const tabMulti = document.getElementById('tab-multi');
-            const tabCustom = document.getElementById('tab-custom');
 
-            const areas = [presetArea, multiArea, customArea];
-            const tabs = [tabPreset, tabMulti, tabCustom];
+            [presetArea, multiArea].forEach(area => area.classList.add('hidden'));
+            [tabPreset, tabMulti].forEach(tab => {
+                tab.classList.remove('bg-white', 'shadow-sm', 'text-indigo-600');
+                tab.classList.add('text-slate-500');
+            });
 
-            areas.forEach(area => area.classList.add('hidden'));
-            tabs.forEach(tab => tab.classList.remove('bg-white', 'shadow-sm', 'text-indigo-600'));
-            tabs.forEach(tab => tab.classList.add('text-slate-500'));
-
-            if (mode === 'preset') {
-                presetArea.classList.remove('hidden');
-                tabPreset.classList.add('bg-white', 'shadow-sm', 'text-indigo-600');
-                tabPreset.classList.remove('text-slate-500');
-            } else if (mode === 'multi') {
+            if (mode === 'multi') {
                 togglePresetDropdown(true);
                 multiArea.classList.remove('hidden');
                 tabMulti.classList.add('bg-white', 'shadow-sm', 'text-indigo-600');
                 tabMulti.classList.remove('text-slate-500');
             } else {
-                togglePresetDropdown(true);
-                customArea.classList.remove('hidden');
-                tabCustom.classList.add('bg-white', 'shadow-sm', 'text-indigo-600');
-                tabCustom.classList.remove('text-slate-500');
+                presetArea.classList.remove('hidden');
+                tabPreset.classList.add('bg-white', 'shadow-sm', 'text-indigo-600');
+                tabPreset.classList.remove('text-slate-500');
             }
 
             updateLink();
@@ -696,25 +707,30 @@ async function renderUI(request, env, FileName, token, isGuest, subConverter) {
             }
         });
 
+        function toggleCustomRules() {
+            const enabled = enableCustomRulesInput.checked;
+            customRulesInput.disabled = !enabled;
+            pinCheckInput.disabled = !enabled;
+
+            customRulesInput.classList.toggle('opacity-60', !enabled);
+            pinCheckInput.parentElement.classList.toggle('opacity-60', !enabled);
+            if (!enabled) {
+                pinCheckInput.checked = false;
+            }
+
+            updateLink();
+        }
+
         function updateLink() {
             const target = document.getElementById('targetInput').value;
             const isGroup = document.getElementById('groupCheck').checked;
-            
+
             let params = new URLSearchParams();
             params.append('target', target);
             if (isGroup) params.append('group_by_country', 'true');
             else params.append('group_by_country', 'false');
 
-            if (currentMode === 'custom') {
-                const customJson = document.getElementById('customRules').value.trim();
-                const isPin = document.getElementById('pinCheck').checked;
-                if (customJson) {
-                    params.append('customRules', customJson);
-                    if(isPin) params.append('pin', 'true');
-                } else {
-                    params.append('selectedRules', 'minimal');
-                }
-            } else if (currentMode === 'multi') {
+            if (currentMode === 'multi') {
                 const checked = Array.from(document.querySelectorAll('.rule-check:checked')).map(el => el.value);
                 if (checked.length > 0) {
                     params.append('selectedRules', JSON.stringify(checked));
@@ -724,6 +740,15 @@ async function renderUI(request, env, FileName, token, isGuest, subConverter) {
             } else {
                 const selectedRule = document.getElementById('selectedRules').value;
                 params.append('selectedRules', selectedRule);
+            }
+
+            if (enableCustomRulesInput.checked) {
+                const customJson = customRulesInput.value.trim();
+                const isPin = pinCheckInput.checked;
+                if (customJson) {
+                    params.append('customRules', customJson);
+                    if (isPin) params.append('pin', 'true');
+                }
             }
 
             const lang = langSelect.value;
@@ -831,6 +856,7 @@ async function renderUI(request, env, FileName, token, isGuest, subConverter) {
             });
         }
 
+        toggleCustomRules();
         toggleRuleMode('preset');
     </script>
 </body>
