@@ -186,7 +186,7 @@ export default {
         responseHeaders['content-type'] = targetContentType[targetPath] || responseHeaders['content-type'];
         responseHeaders['X-Detected-Target'] = targetPath;
 
-        const reqSelectedRules = url.searchParams.get('selectedRules') || 'minimal';
+        const reqSelectedRules = url.searchParams.get('selectedRules') || '';
         const reqCustomRules = url.searchParams.get('customRules');
         const reqGroup = url.searchParams.has('group_by_country') ? url.searchParams.get('group_by_country') : 'false';
         const reqPin = url.searchParams.get('pin') || 'false';
@@ -230,7 +230,14 @@ export default {
 
         // 解除互斥：允许 selectedRules 与 customRules 同时生效叠加
         const hasCustomRules = Boolean(reqCustomRules && reqCustomRules.trim() !== '[]' && reqCustomRules.trim().length > 2);
-        backendParams.set('selectedRules', reqSelectedRules);
+        const hasSelectedRules = Boolean(reqSelectedRules && reqSelectedRules.trim() !== '');
+
+        if (hasSelectedRules) {
+            backendParams.set('selectedRules', reqSelectedRules);
+        } else if (!hasCustomRules) {
+            // 两者都未指定时才回落到精简预设，避免叠加自定义规则时强塞 minimal
+            backendParams.set('selectedRules', 'minimal');
+        }
         if (hasCustomRules) {
             backendParams.set('customRules', reqCustomRules);
             if (reqPin === 'true') backendParams.set('pin', 'true');
